@@ -19,7 +19,9 @@ class Warehouse:
         random.shuffle(product_choices) 
 
         for aisle in [1, 3, 5, 7]:
-            for y in range(1, 12):  
+            for y in range(1, 12): 
+                if y == 6:
+                    continue
                 for side in ['L', 'R']:  
                     product = product_choices.pop() if product_choices else None
                     layout_list.append({'Aisle': aisle, 'Position': y, 'Side': side, 'Product': product})
