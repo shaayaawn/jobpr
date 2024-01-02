@@ -101,6 +101,7 @@ class Warehouse:
         
 
 def main():
+    st.set_page_config(layout="wide")
     warehouse = Warehouse()
     col101,col102,col103 = st.columns([.25,1,.25])
     col102.title("Order batching and picker routing ")   
