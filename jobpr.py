@@ -1,6 +1,7 @@
 import streamlit as st
 import random
 import pandas as pd
+import plotly.graph_objects as go
 
 class Warehouse:
     def __init__(self, num_products=80, num_orders=50, order_size_range=(1, 10), num_pickers=5, picker_capacity=10):
@@ -134,16 +135,37 @@ class Warehouse:
             combined_products = []
             for index in batch_indices:
                 combined_products.extend(orders[index])
-            unique_products = set(combined_products)
-            final_batch_list.append(list(unique_products))
+            # unique_products = set(combined_products)
+            final_batch_list.append(combined_products)
            
-        return final_batch_list
+        # New step: Review and possibly combine underutilized batches
+        optimized_batches = []
+        # Temporary storage for batches currently being combined
+        temp_batches = final_batch_list.copy()
+    
+        while temp_batches:
+            batch = temp_batches.pop(0)  # Take the first batch for consideration
+            i = 0  # Initialize a counter for iterating through temp_batches
+            # combined = False
+            while i < len(temp_batches):
+                # Check if combining does not exceed capacity
+                if len(batch) + len(temp_batches[i]) <= self.picker_capacity:
+                    batch += temp_batches.pop(i)  # Combine batches and remove the combined one
+                    # combined = True
+                    # Do not increment i since we want to compare the newly combined batch starting from the current index
+                else:
+                    i += 1  # Only increment if no combination occurred
+    
+            # If batch was combined, it's already in its optimized form; if not, it's added directly
+            optimized_batches.append(list(set(batch)))
+    
+        return optimized_batches
     
     
     
     def s_shape_routing(self,batching_algorithm_output):
         
-        total_distance = 0
+        # total_distance = 0
         batch_distance_list = []
     
         # List to store batch index, aisle, and block information
@@ -175,27 +197,27 @@ class Warehouse:
             
             # Process Block 1
             if aisles_block_1 and aisles_block_2:
-                distance_block_1 = aisles_block_1[-1] + 5*len(aisles_block_1)
+                distance_block_1 = aisles_block_1[-1] + 6*len(aisles_block_1)
                 if len(aisles_block_1)%2 ==1:
                     current_location = (aisles_block_1[-1],6)
                 else:
                     current_location = (aisles_block_1[-1],0)
-                distance_block_2 = abs(current_location[0] - aisles_block_2[-1]) + 5*len(aisles_block_2)
+                distance_block_2 = abs(current_location[0] - aisles_block_2[-1]) + 6*len(aisles_block_2)
                 batch_distance= distance_block_1+distance_block_2+abs(aisles_block_2[-1]+9)
                 batch_distance_list.append(batch_distance)
     
             # Process Block 2
             elif aisles_block_1:
-                distance_block_1 = 2*aisles_block_1[-1] + 5*len(aisles_block_1)
+                distance_block_1 = 2*aisles_block_1[-1] + 6*len(aisles_block_1)
                 if len(aisles_block_1)%2 ==1:
-                    batch_distance = distance_block_1 + 5
+                    batch_distance = distance_block_1 + 6
                 else:
                     batch_distance=distance_block_1
                 batch_distance_list.append(batch_distance)
                 
                 
             elif aisles_block_2:
-                distance_block_2 = 2*aisles_block_2[0] + 5*len(aisles_block_2)
+                distance_block_2 = 2*aisles_block_2[0] + 6*len(aisles_block_2)+6
                 if len(aisles_block_2)%2 ==1:
                     batch_distance +=11
                 else:
@@ -230,7 +252,8 @@ class Warehouse:
         distance += current_location[0]+current_location[1]
         return distance
     
-    
+    def batch_distance_sum(self,df):
+        return df['batch_distance'].sum()
     
     
     
@@ -247,14 +270,43 @@ class Warehouse:
     
 
 def main():
+    
+    def collect_distances_for_capacities(batching_algorithm_name, picking_algorithm_name):
+        capacities = range(10, 31)  # From 10 to 30
+        total_distances = []
+
+        for capacity in capacities:
+            warehouse = Warehouse(picker_capacity=capacity,num_orders=num_orders)
+            # Dynamically get the batching and picking methods using getattr
+            batching_algorithm = getattr(warehouse, batching_algorithm_name)
+            picking_algorithm = getattr(warehouse, picking_algorithm_name)
+            batches = batching_algorithm()
+            routing_output = picking_algorithm(batches)
+            total_distance = warehouse.batch_distance_sum(routing_output)
+            total_distances.append(total_distance)
+        return capacities, total_distances
+    def plot_distances_with_plotly(capacities, total_distances):
+        fig = go.Figure(data=go.Scatter(x=list(capacities), y=total_distances, mode='lines+markers'))
+        fig.update_layout(title='Total Distance by Picker Capacity',
+                          xaxis_title='Picker Capacity',
+                          yaxis_title='Total Distance',
+                          template='plotly_white')
+        st.plotly_chart(fig, use_container_width=True)
+    
+    
+    
+    
     # Set page configuration
     st.set_page_config(layout="wide", page_title="Warehouse Order Batching and Routing")
-    warehouse = Warehouse()
+    
 
     # Page title
     st.title("Order Batching and Picker Routing")
 
     # Start instance button
+    num_orders = st.number_input("Number of Orders", min_value=10, value=50, step=5)  # Default to 50, allows user input
+    picker_capacity = st.number_input("Picker Capacity", min_value=10,max_value=30, value=10, step=1)  # Default to 10, allows user input
+    warehouse = Warehouse(num_orders=num_orders, picker_capacity=picker_capacity)
     if st.button("Start an Instance"):
         st.experimental_rerun()
 
@@ -289,7 +341,7 @@ def main():
         st.metric("Total Distance", dummy_route_distance.sum())
 
     with col_dummy_route2:
-        st.markdown("#### Distance for Custom Batching & Time Saving Routing")
+        st.markdown("#### Distance for Custom Batching & S Shape Routing")
         time_saving_route_distance = warehouse.s_shape_routing(dummy_batches)
         st.dataframe(time_saving_route_distance)
         st.metric("Total Distance", time_saving_route_distance.sum())
@@ -312,6 +364,92 @@ def main():
         time_saving_s_shape_route_distance = warehouse.s_shape_routing(time_saving_batches)
         st.dataframe(time_saving_s_shape_route_distance)
         st.metric("Total Distance", time_saving_s_shape_route_distance.sum())
+        
+        
+        
+    capacities = list(range(10, 31))  # Defined once, used for all plots
+
+    # Collect distances for dummy batching with two picking algorithms
+    _, distances_dummy_custom = collect_distances_for_capacities("dummy_batching", "dummy_routing")
+    _, distances_dummy_s_shape = collect_distances_for_capacities("dummy_batching", "s_shape_routing")
+    
+    # Collect distances for time-saving batching with two picking algorithms
+    _, distances_time_saving_custom = collect_distances_for_capacities("time_saving_batching", "dummy_routing")
+    _, distances_time_saving_s_shape = collect_distances_for_capacities("time_saving_batching", "s_shape_routing")    
+    st.header("Graphs for different Capacities")         
+    fig_dummy = go.Figure()
+    fig_dummy.add_trace(go.Scatter(x=capacities, y=distances_dummy_custom, mode='lines+markers', name='Custom Routing'))
+    fig_dummy.add_trace(go.Scatter(x=capacities, y=distances_dummy_s_shape, mode='lines+markers', name='S Shape Routing'))
+    fig_dummy.update_layout(title='Custom Batching with Different Routing Algorithms',
+                            xaxis_title='Picker Capacity',
+                            yaxis_title='Total Distance',
+                            template='plotly_white')
+    st.plotly_chart(fig_dummy, use_container_width=True)
+    
+    # Create Plotly figure for time-saving batching comparisons
+    fig_time_saving = go.Figure()
+    fig_time_saving.add_trace(go.Scatter(x=capacities, y=distances_time_saving_custom, mode='lines+markers', name='Custom Routing'))
+    fig_time_saving.add_trace(go.Scatter(x=capacities, y=distances_time_saving_s_shape, mode='lines+markers', name='S Shape Routing'))
+    fig_time_saving.update_layout(title='Time Saving Batching with Different Routing Algorithms',
+                                  xaxis_title='Picker Capacity',
+                                  yaxis_title='Total Distance',
+                                  template='plotly_white')
+    st.plotly_chart(fig_time_saving, use_container_width=True)
+    
+    fig_batching_comparison = go.Figure()
+
+    # Add trace for dummy batching with S Shape Routing
+    fig_batching_comparison.add_trace(go.Scatter(x=capacities, y=distances_dummy_s_shape,
+                                                 mode='lines+markers',
+                                                 name='Custom Batching with S Shape Routing'))
+    
+    # Add trace for time-saving batching with S Shape Routing
+    fig_batching_comparison.add_trace(go.Scatter(x=capacities, y=distances_time_saving_s_shape,
+                                                 mode='lines+markers',
+                                                 name='Time Saving Batching with S Shape Routing'))
+    
+    # Update layout with titles and labels
+    fig_batching_comparison.update_layout(title='Comparison of Batching Strategies with S Shape Routing',
+                                          xaxis_title='Picker Capacity',
+                                          yaxis_title='Total Distance',
+                                          template='plotly_white')
+    
+    # Display the figure in the Streamlit app
+    st.plotly_chart(fig_batching_comparison, use_container_width=True)
+        
+    
+    
+    
+    
+    #  
+    
+    # st.markdown("#### Graph for custom batching and picking")
+    
+    # capacities, total_distances = collect_distances_for_capacities("dummy_batching", "dummy_routing")
+    # plot_distances_with_plotly(capacities, total_distances)
+    
+    # st.markdown("#### Graph for custom batching and S Shape picking")
+    
+    # capacities, total_distances = collect_distances_for_capacities("dummy_batching", "s_shape_routing")
+    # plot_distances_with_plotly(capacities, total_distances)
+    
+    # st.markdown("#### Graph for Time Saving batching and custom routing")
+    
+    # capacities, total_distances = collect_distances_for_capacities("time_saving_batching", "dummy_routing")
+    # plot_distances_with_plotly(capacities, total_distances)
+    
+    # st.markdown("#### Graph for Time Saving batching and S Shape Routing")
+    
+    # capacities, total_distances = collect_distances_for_capacities("time_saving_batching", "s_shape_routing")
+    # plot_distances_with_plotly(capacities, total_distances)
+    
+    
+    
+    
+    
+    
+    
+    
 
 if __name__ == "__main__":
     main()
