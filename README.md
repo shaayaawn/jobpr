@@ -1,1 +1,2 @@
 This is a Project done for the Joint Order Batching and Picker Routing Optimization Problem. The Simulation Includes a Dummy approach for Order Batching and Picker Routing (Custom Algorithms) and also Seperate S-Shape Heuristc and Time-Saving Heuristic for Seperate Routing and Batching Problems and at the End Optimized Algorithm in Which the Join Order Batchin and picker routing problme will be solved and the results and graphs will be shown in Streamlit Application.
+This Project is done for an IT Project in the Universität Hildesheim.
